@@ -370,7 +370,7 @@ export default function App() {
           <button type="button" className="theme-toggle" onClick={toggleTheme}>
             {theme === 'dark' ? 'Modo claro' : 'Modo oscuro'}
           </button>
-          <div className="hero-badge">{activeScreen === 'dashboard' ? 'Listo para crecer' : `${pendingSales.length} pendientes`}</div>
+          {activeScreen === 'sales' && <div className="hero-badge">{`${pendingSales.length} pendientes`}</div>}
         </div>
       </header>
       {activeScreen === 'dashboard' && (
