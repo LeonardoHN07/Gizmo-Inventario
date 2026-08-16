@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 
 const initialProducts = [
-  { id: 1, name: 'Auriculares', category: 'Tecnología', price: 59.99, quantity: 12 },
-  { id: 2, name: 'Camiseta', category: 'Ropa', price: 24.5, quantity: 4 },
-  { id: 3, name: 'Lámpara LED', category: 'Hogar', price: 34.99, quantity: 0 },
+  { id: 1, name: 'Auriculares', category: 'Tecnología', price: 39.99, salePrice: 59.99, quantity: 12, minimum: 5, retired: false },
+  { id: 2, name: 'Camiseta', category: 'Ropa', price: 14.5, salePrice: 24.5, quantity: 4, minimum: 3, retired: false },
+  { id: 3, name: 'Lámpara LED', category: 'Hogar', price: 24.99, salePrice: 34.99, quantity: 0, minimum: 2, retired: false },
 ]
 
 const initialCategories = ['Tecnología', 'Ropa', 'Hogar']
@@ -40,16 +40,34 @@ function formatCurrency(value) {
   }).format(value)
 }
 
-function getStockStatus(quantity) {
+function getStockStatus(quantity, minimum) {
   if (quantity <= 0) return 'Sin stock'
-  if (quantity <= 5) return 'Stock bajo'
+  if (quantity < minimum) return 'Stock bajo'
   return 'Disponible'
 }
 
-function getStockStatusClass(quantity) {
+function getStockStatusClass(quantity, minimum) {
   if (quantity <= 0) return 'status-badge danger'
-  if (quantity <= 5) return 'status-badge warning'
+  if (quantity < minimum) return 'status-badge warning'
   return 'status-badge success'
+}
+
+function normalizeProduct(product) {
+  const minimum = Number(product.minimum)
+  const productPrice = Number(product.price)
+  const salePrice = Number(product.salePrice ?? product.price)
+  const retired = Boolean(product.retired)
+
+  const normalizedSalePrice = Number.isFinite(salePrice) && salePrice >= 0 ? salePrice : 0
+  const normalizedProductPrice = Number.isFinite(productPrice) && productPrice >= 0 ? productPrice : normalizedSalePrice
+
+  return {
+    ...product,
+    price: normalizedProductPrice,
+    salePrice: normalizedSalePrice,
+    minimum: Number.isFinite(minimum) && minimum >= 0 ? minimum : 5,
+    retired,
+  }
 }
 
 function getSaleStockDelta(previousStatus, nextStatus, quantity) {
@@ -69,10 +87,18 @@ function normalizeSale(sale) {
 }
 
 export default function App() {
-  const [products, setProducts] = useState(initialProducts)
+  const [products, setProducts] = useState(initialProducts.map(normalizeProduct))
   const [sales, setSales] = useState(initialSales.map(normalizeSale))
   const [categories, setCategories] = useState(initialCategories)
-  const [productForm, setProductForm] = useState({ name: '', category: 'Tecnología', price: '', quantity: '' })
+  const [productForm, setProductForm] = useState({
+    name: '',
+    category: 'Tecnología',
+    price: '',
+    salePrice: '',
+    quantity: '',
+    minimum: '5',
+    retired: 'en-venta',
+  })
   const [saleForm, setSaleForm] = useState({
     productId: '',
     quantity: '',
@@ -85,6 +111,8 @@ export default function App() {
   const [categoryDraft, setCategoryDraft] = useState('')
   const [editingProductIds, setEditingProductIds] = useState([])
   const [draftQuantities, setDraftQuantities] = useState({})
+  const [draftMinimums, setDraftMinimums] = useState({})
+  const [draftRetired, setDraftRetired] = useState({})
   const [isInventoryEditing, setIsInventoryEditing] = useState(false)
   const [activeScreen, setActiveScreen] = useState('dashboard')
   const [editingSaleId, setEditingSaleId] = useState(null)
@@ -95,7 +123,7 @@ export default function App() {
   useEffect(() => {
     const stored = getStoredData()
     if (stored) {
-      setProducts(stored.products || initialProducts)
+      setProducts((stored.products || initialProducts).map(normalizeProduct))
       setSales((stored.sales || initialSales).map(normalizeSale))
       setCategories(stored.categories || initialCategories)
     }
@@ -126,25 +154,53 @@ export default function App() {
   const pendingSales = useMemo(() => sales.filter((sale) => sale.status === 'Pendiente'), [sales])
 
   const selectedSaleProduct = useMemo(
-    () => products.find((product) => product.id === Number(saleForm.productId)) || null,
+    () => products.find((product) => product.id === Number(saleForm.productId) && !product.retired) || null,
     [products, saleForm.productId],
   )
+
+  const saleEligibleProducts = useMemo(() => products.filter((product) => !product.retired), [products])
 
   const handleAddProduct = (event) => {
     event.preventDefault()
 
-    if (!productForm.name.trim() || !productForm.price || !productForm.quantity) return
+    if (
+      !productForm.name.trim() ||
+      !productForm.price ||
+      !productForm.salePrice ||
+      !productForm.quantity ||
+      productForm.minimum === ''
+    ) {
+      return
+    }
+
+    const minimum = Number(productForm.minimum)
+    const productPrice = Number(productForm.price)
+    const salePrice = Number(productForm.salePrice)
+    if (!Number.isFinite(minimum) || minimum < 0) return
+    if (!Number.isFinite(productPrice) || productPrice < 0) return
+    if (!Number.isFinite(salePrice) || salePrice < 0) return
 
     const newProduct = {
       id: Date.now(),
       name: productForm.name.trim(),
       category: productForm.category.trim(),
-      price: Number(productForm.price),
+      price: productPrice,
+      salePrice,
       quantity: Number(productForm.quantity),
+      minimum,
+      retired: productForm.retired === 'retirado',
     }
 
     setProducts((prev) => [newProduct, ...prev])
-    setProductForm({ name: '', category: productForm.category, price: '', quantity: '' })
+    setProductForm({
+      name: '',
+      category: productForm.category,
+      price: '',
+      salePrice: '',
+      quantity: '',
+      minimum: String(minimum),
+      retired: productForm.retired,
+    })
 
     if (!categories.includes(productForm.category.trim())) {
       setCategories((prev) => [...prev, productForm.category.trim()])
@@ -195,13 +251,17 @@ export default function App() {
     const quantity = Number(saleForm.quantity)
 
     if (!product || !quantity || quantity <= 0) return
+    if (product.retired) {
+      window.alert('Este producto está retirado y no se puede vender.')
+      return
+    }
     if (product.quantity < quantity) return
 
     const newSale = {
       id: Date.now(),
       productName: product.name,
       quantity,
-      total: Number((product.price * quantity).toFixed(2)),
+      total: Number((product.salePrice * quantity).toFixed(2)),
       status: saleForm.status,
       recipientName: saleForm.recipientName.trim(),
       shippingAddress: saleForm.shippingAddress.trim(),
@@ -305,12 +365,20 @@ export default function App() {
       setIsInventoryEditing(false)
       setEditingProductIds([])
       setDraftQuantities({})
+      setDraftMinimums({})
+      setDraftRetired({})
       return
     }
 
     setIsInventoryEditing(true)
     const nextDrafts = Object.fromEntries(products.map((product) => [product.id, String(product.quantity)]))
+    const nextMinimumDrafts = Object.fromEntries(products.map((product) => [product.id, String(product.minimum)]))
+    const nextRetiredDrafts = Object.fromEntries(
+      products.map((product) => [product.id, product.retired ? 'retirado' : 'en-venta']),
+    )
     setDraftQuantities(nextDrafts)
+    setDraftMinimums(nextMinimumDrafts)
+    setDraftRetired(nextRetiredDrafts)
     setEditingProductIds(products.map((product) => product.id))
   }
 
@@ -318,23 +386,42 @@ export default function App() {
     setDraftQuantities((prev) => ({ ...prev, [productId]: value }))
   }
 
+  const updateDraftMinimum = (productId, value) => {
+    setDraftMinimums((prev) => ({ ...prev, [productId]: value }))
+  }
+
+  const updateDraftRetired = (productId, value) => {
+    setDraftRetired((prev) => ({ ...prev, [productId]: value }))
+  }
+
   const saveStockEdit = (productId) => {
     const normalizedValue = Number(draftQuantities[productId])
+    const normalizedMinimum = Number(draftMinimums[productId])
+    const isRetired = draftRetired[productId] === 'retirado'
     if (!Number.isFinite(normalizedValue) || normalizedValue < 0) return
+    if (!Number.isFinite(normalizedMinimum) || normalizedMinimum < 0) return
 
     const confirmed = window.confirm('¿Deseas guardar este cambio de stock?')
     if (!confirmed) return
 
     setProducts((prev) =>
-      prev.map((item) => (item.id === productId ? { ...item, quantity: normalizedValue } : item)),
+      prev.map((item) =>
+        item.id === productId
+          ? { ...item, quantity: normalizedValue, minimum: normalizedMinimum, retired: isRetired }
+          : item,
+      ),
     )
     setEditingProductIds((prev) => prev.filter((id) => id !== productId))
     setDraftQuantities((prev) => ({ ...prev, [productId]: String(normalizedValue) }))
+    setDraftMinimums((prev) => ({ ...prev, [productId]: String(normalizedMinimum) }))
+    setDraftRetired((prev) => ({ ...prev, [productId]: isRetired ? 'retirado' : 'en-venta' }))
   }
 
   const cancelStockEdit = () => {
     setEditingProductIds([])
     setDraftQuantities({})
+    setDraftMinimums({})
+    setDraftRetired({})
     setIsInventoryEditing(false)
   }
 
@@ -411,7 +498,10 @@ export default function App() {
                     <th>Categoría</th>
                     <th>Producto</th>
                     <th>Precio</th>
+                    <th>Precio de venta</th>
                     <th>Cantidad</th>
+                    <th>Mínimo</th>
+                    <th>Venta</th>
                     <th>Estado</th>
                   </tr>
                 </thead>
@@ -421,6 +511,7 @@ export default function App() {
                       <td>{product.category}</td>
                       <td>{product.name}</td>
                       <td>{formatCurrency(product.price)}</td>
+                      <td>{formatCurrency(product.salePrice)}</td>
                       <td>
                         {isInventoryEditing && editingProductIds.includes(product.id) ? (
                           <div className="edit-stock-actions">
@@ -442,7 +533,35 @@ export default function App() {
                         )}
                       </td>
                       <td>
-                        <span className={getStockStatusClass(product.quantity)}>{getStockStatus(product.quantity)}</span>
+                        {isInventoryEditing && editingProductIds.includes(product.id) ? (
+                          <input
+                            className="inline-quantity-input"
+                            type="number"
+                            min="0"
+                            value={draftMinimums[product.id] ?? ''}
+                            onChange={(event) => updateDraftMinimum(product.id, event.target.value)}
+                          />
+                        ) : (
+                          <span>{product.minimum}</span>
+                        )}
+                      </td>
+                      <td>
+                        {isInventoryEditing && editingProductIds.includes(product.id) ? (
+                          <select
+                            value={draftRetired[product.id] ?? 'en-venta'}
+                            onChange={(event) => updateDraftRetired(product.id, event.target.value)}
+                          >
+                            <option value="en-venta">En venta</option>
+                            <option value="retirado">Retirado</option>
+                          </select>
+                        ) : (
+                          <span>{product.retired ? 'Retirado' : 'En venta'}</span>
+                        )}
+                      </td>
+                      <td>
+                        <span className={getStockStatusClass(product.quantity, product.minimum)}>
+                          {getStockStatus(product.quantity, product.minimum)}
+                        </span>
                       </td>
                     </tr>
                   ))}
@@ -483,11 +602,35 @@ export default function App() {
                 <input
                   type="number"
                   min="0"
+                  step="0.01"
+                  value={productForm.salePrice}
+                  onChange={(event) => setProductForm((prev) => ({ ...prev, salePrice: event.target.value }))}
+                  placeholder="Precio de venta"
+                  required
+                />
+                <input
+                  type="number"
+                  min="0"
                   value={productForm.quantity}
                   onChange={(event) => setProductForm((prev) => ({ ...prev, quantity: event.target.value }))}
                   placeholder="Cantidad"
                   required
                 />
+                <input
+                  type="number"
+                  min="0"
+                  value={productForm.minimum}
+                  onChange={(event) => setProductForm((prev) => ({ ...prev, minimum: event.target.value }))}
+                  placeholder="Mínimo"
+                  required
+                />
+                <select
+                  value={productForm.retired}
+                  onChange={(event) => setProductForm((prev) => ({ ...prev, retired: event.target.value }))}
+                >
+                  <option value="en-venta">En venta</option>
+                  <option value="retirado">Retirado</option>
+                </select>
                 <button type="submit">Guardar producto</button>
               </form>
             </div>
@@ -560,7 +703,10 @@ export default function App() {
                 <div className="sales-list pending-sales-list">
                   {pendingSales.length > 0 ? (
                     pendingSales.map((sale) => (
-                      <article key={sale.id} className="pending-sale-card">
+                      <article
+                        key={sale.id}
+                        className={editingSaleId === sale.id ? 'pending-sale-card pending-sale-card-active' : 'pending-sale-card'}
+                      >
                         <div>
                           <strong>{sale.productName}</strong>
                           <p>{sale.quantity} unidades • {formatCurrency(sale.total)}</p>
@@ -587,7 +733,7 @@ export default function App() {
             </div>
 
             <div className="panel-block">
-              <h3>{editingSaleId ? 'Editar pedido' : 'Selecciona un pedido'}</h3>
+              <h3>{editingSaleId ? 'Editar pedido' : 'Selecciona una venta'}</h3>
               {editingSaleId ? (
                 <form className="form-stack panel-form" onSubmit={saveSaleEdit}>
                   <select value={saleDraft.status} onChange={(event) => setSaleDraft((prev) => ({ ...prev, status: event.target.value }))}>
@@ -612,7 +758,7 @@ export default function App() {
                 </form>
               ) : (
                 <div className="empty-editor-state">
-                  <p>Selecciona un pedido pendiente para editar su estado o su dirección.</p>
+                  <p>Selecciona una venta desde pendientes o desde el historial para editar su estado o su dirección.</p>
                 </div>
               )}
             </div>
@@ -627,7 +773,7 @@ export default function App() {
 
           <div className="sales-list">
             {sales.map((sale) => (
-              <div key={sale.id} className="sale-item">
+              <div key={sale.id} className={editingSaleId === sale.id ? 'sale-item sale-item-active' : 'sale-item'}>
                 <div>
                   <strong>{sale.productName}</strong>
                   <p>{sale.quantity} unidades • {sale.status}</p>
@@ -641,6 +787,9 @@ export default function App() {
                 <div className="sale-meta">
                   <span>{formatCurrency(sale.total)}</span>
                   <small>{sale.date}</small>
+                  <button type="button" className="ghost-btn" onClick={() => beginSaleEdit(sale)}>
+                    Editar
+                  </button>
                 </div>
               </div>
             ))}
@@ -672,7 +821,7 @@ export default function App() {
                     required
                   >
                     <option value="">Selecciona un producto</option>
-                    {products.map((product) => (
+                    {saleEligibleProducts.map((product) => (
                       <option key={product.id} value={product.id}>
                         {product.name}
                       </option>
