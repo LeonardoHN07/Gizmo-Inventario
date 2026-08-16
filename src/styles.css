@@ -572,6 +572,29 @@ td {
   padding: 0.45rem 0.7rem;
 }
 
+.product-name-button {
+  background: transparent;
+  color: #2563eb;
+  padding: 0;
+  border-radius: 0;
+  text-align: left;
+  font-weight: 600;
+}
+
+.product-name-button:hover {
+  background: transparent;
+  color: #1d4ed8;
+  text-decoration: underline;
+}
+
+:root[data-theme='dark'] .product-name-button {
+  color: #60a5fa;
+}
+
+:root[data-theme='dark'] .product-name-button:hover {
+  color: #93c5fd;
+}
+
 .section-header {
   margin-bottom: 0.5rem;
   display: flex;
@@ -612,6 +635,207 @@ td {
   color: #64748b;
 }
 
+.analytics-screen {
+  margin-top: 1rem;
+}
+
+.product-image-modal {
+  width: min(620px, 100%);
+}
+
+.product-image-preview {
+  width: 100%;
+  max-height: 320px;
+  object-fit: cover;
+  border-radius: 14px;
+  border: 1px solid #cbd5e1;
+  margin-bottom: 1rem;
+}
+
+.product-image-empty {
+  border: 1px dashed #cbd5e1;
+  border-radius: 14px;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: #f8fafc;
+}
+
+.product-image-empty p {
+  margin: 0;
+  color: #64748b;
+}
+
+.product-image-empty p + p {
+  margin-top: 0.35rem;
+}
+
+.product-image-form {
+  margin-top: 0.2rem;
+}
+
+:root[data-theme='dark'] .product-image-preview {
+  border-color: #334155;
+}
+
+:root[data-theme='dark'] .product-image-empty {
+  border-color: #334155;
+  background: #0f172a;
+}
+
+.analytics-header {
+  margin-bottom: 1rem;
+}
+
+.analytics-tab-switcher {
+  display: inline-flex;
+  gap: 0.4rem;
+  margin-bottom: 0.9rem;
+}
+
+.analytics-tab-switcher .screen-switcher-btn {
+  width: auto;
+}
+
+.costs-layout {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.costs-total {
+  margin: 0.7rem 0 0.85rem;
+  font-weight: 700;
+}
+
+.costs-list {
+  max-height: 360px;
+  overflow: auto;
+}
+
+.costs-layout .panel-form input,
+.costs-layout .panel-form select,
+.costs-layout .panel-form button {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.costs-layout .panel-form input[type='date'] {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.analytics-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-bottom: 1rem;
+}
+
+.analytics-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  color: #334155;
+  font-weight: 600;
+}
+
+.analytics-filters input {
+  min-width: 160px;
+  border-radius: 10px;
+  border: 1px solid #cbd5e1;
+  padding: 0.55rem 0.7rem;
+  background: #f8fafc;
+}
+
+:root[data-theme='dark'] .analytics-filters label {
+  color: #cbd5e1;
+}
+
+:root[data-theme='dark'] .analytics-filters input {
+  background: #0f172a;
+  border-color: #334155;
+  color: #e2e8f0;
+}
+
+.analytics-stats-grid {
+  margin-bottom: 1rem;
+}
+
+.analytics-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.analytics-panel {
+  background: white;
+  border-radius: 16px;
+  border: 1px solid #e2e8f0;
+  padding: 1rem;
+}
+
+.analytics-panel h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.analytics-panel-wide {
+  grid-column: 1 / -1;
+}
+
+.analytics-chart-list {
+  margin-top: 0.9rem;
+  display: grid;
+  gap: 0.8rem;
+}
+
+.chart-row {
+  display: grid;
+  gap: 0.35rem;
+}
+
+.chart-row-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.chart-track {
+  height: 12px;
+  border-radius: 999px;
+  background: #e2e8f0;
+  overflow: hidden;
+}
+
+.chart-bar {
+  height: 100%;
+  border-radius: 999px;
+}
+
+.chart-bar-top {
+  background: linear-gradient(90deg, #2563eb 0%, #0ea5e9 100%);
+}
+
+.chart-bar-worst {
+  background: linear-gradient(90deg, #fb7185 0%, #f43f5e 100%);
+}
+
+.chart-bar-profit {
+  background: linear-gradient(90deg, #0f766e 0%, #10b981 100%);
+}
+
+:root[data-theme='dark'] .analytics-panel {
+  border-color: #334155;
+}
+
+:root[data-theme='dark'] .chart-track {
+  background: #334155;
+}
+
 @media (max-width: 900px) {
   .stats-grid,
   .grid-layout {
@@ -637,7 +861,40 @@ td {
   }
 
   .screen-switcher-btn {
-    width: 50%;
+    width: 33.33%;
+  }
+
+  .analytics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .costs-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .analytics-tab-switcher {
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .analytics-tab-switcher .screen-switcher-btn {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .analytics-filters {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .analytics-filters label {
+    width: 100%;
+  }
+
+  .analytics-filters input {
+    width: 100%;
   }
 
   .modal-card {

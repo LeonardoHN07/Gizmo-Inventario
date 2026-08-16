@@ -1,16 +1,64 @@
 import { useEffect, useMemo, useState } from 'react'
 
 const initialProducts = [
-  { id: 1, name: 'Auriculares', category: 'Tecnología', price: 39.99, salePrice: 59.99, quantity: 12, minimum: 5, retired: false },
-  { id: 2, name: 'Camiseta', category: 'Ropa', price: 14.5, salePrice: 24.5, quantity: 4, minimum: 3, retired: false },
-  { id: 3, name: 'Lámpara LED', category: 'Hogar', price: 24.99, salePrice: 34.99, quantity: 0, minimum: 2, retired: false },
+  {
+    id: 1,
+    name: 'Auriculares',
+    category: 'Tecnología',
+    price: 39.99,
+    salePrice: 59.99,
+    quantity: 12,
+    minimum: 5,
+    retired: false,
+    imageUrl: '',
+  },
+  {
+    id: 2,
+    name: 'Camiseta',
+    category: 'Ropa',
+    price: 14.5,
+    salePrice: 24.5,
+    quantity: 4,
+    minimum: 3,
+    retired: false,
+    imageUrl: '',
+  },
+  {
+    id: 3,
+    name: 'Lámpara LED',
+    category: 'Hogar',
+    price: 24.99,
+    salePrice: 34.99,
+    quantity: 0,
+    minimum: 2,
+    retired: false,
+    imageUrl: '',
+  },
 ]
 
 const initialCategories = ['Tecnología', 'Ropa', 'Hogar']
 
 const initialSales = [
-  { id: 1, productName: 'Auriculares', quantity: 2, total: 119.98, status: 'Completada', date: '2026-07-28' },
-  { id: 2, productName: 'Camiseta', quantity: 1, total: 24.5, status: 'Pendiente', date: '2026-08-01' },
+  {
+    id: 1,
+    productName: 'Auriculares',
+    quantity: 2,
+    total: 119.98,
+    unitPrice: 39.99,
+    unitSalePrice: 59.99,
+    status: 'Completada',
+    date: '2026-07-28',
+  },
+  {
+    id: 2,
+    productName: 'Camiseta',
+    quantity: 1,
+    total: 24.5,
+    unitPrice: 14.5,
+    unitSalePrice: 24.5,
+    status: 'Pendiente',
+    date: '2026-08-01',
+  },
 ]
 
 function getStoredData() {
@@ -57,6 +105,7 @@ function normalizeProduct(product) {
   const productPrice = Number(product.price)
   const salePrice = Number(product.salePrice ?? product.price)
   const retired = Boolean(product.retired)
+  const imageUrl = typeof product.imageUrl === 'string' ? product.imageUrl : ''
 
   const normalizedSalePrice = Number.isFinite(salePrice) && salePrice >= 0 ? salePrice : 0
   const normalizedProductPrice = Number.isFinite(productPrice) && productPrice >= 0 ? productPrice : normalizedSalePrice
@@ -67,6 +116,7 @@ function normalizeProduct(product) {
     salePrice: normalizedSalePrice,
     minimum: Number.isFinite(minimum) && minimum >= 0 ? minimum : 5,
     retired,
+    imageUrl,
   }
 }
 
@@ -79,10 +129,32 @@ function getSaleStockDelta(previousStatus, nextStatus, quantity) {
 }
 
 function normalizeSale(sale) {
+  const parsedUnitSalePrice = Number(sale.unitSalePrice)
+  const unitSalePrice = Number.isFinite(parsedUnitSalePrice)
+    ? parsedUnitSalePrice
+    : sale.quantity > 0
+      ? Number((sale.total / sale.quantity).toFixed(2))
+      : 0
+
+  const parsedUnitPrice = Number(sale.unitPrice)
+  const unitPrice = Number.isFinite(parsedUnitPrice) ? parsedUnitPrice : unitSalePrice
+
   return {
     recipientName: '',
     shippingAddress: '',
     ...sale,
+    unitPrice,
+    unitSalePrice,
+  }
+}
+
+function normalizeLogisticsCost(cost) {
+  const amount = Number(cost.amount)
+  return {
+    id: cost.id ?? Date.now(),
+    date: typeof cost.date === 'string' && cost.date ? cost.date : new Date().toISOString().slice(0, 10),
+    amount: Number.isFinite(amount) && amount >= 0 ? amount : 0,
+    note: typeof cost.note === 'string' ? cost.note : '',
   }
 }
 
@@ -98,6 +170,7 @@ export default function App() {
     quantity: '',
     minimum: '5',
     retired: 'en-venta',
+    imageUrl: '',
   })
   const [saleForm, setSaleForm] = useState({
     productId: '',
@@ -110,6 +183,8 @@ export default function App() {
   const [editingCategory, setEditingCategory] = useState(null)
   const [categoryDraft, setCategoryDraft] = useState('')
   const [editingProductIds, setEditingProductIds] = useState([])
+  const [draftPrices, setDraftPrices] = useState({})
+  const [draftSalePrices, setDraftSalePrices] = useState({})
   const [draftQuantities, setDraftQuantities] = useState({})
   const [draftMinimums, setDraftMinimums] = useState({})
   const [draftRetired, setDraftRetired] = useState({})
@@ -118,6 +193,13 @@ export default function App() {
   const [editingSaleId, setEditingSaleId] = useState(null)
   const [saleDraft, setSaleDraft] = useState({ status: 'Pendiente', recipientName: '', shippingAddress: '' })
   const [isSaleFormOpen, setIsSaleFormOpen] = useState(false)
+  const [selectedProductId, setSelectedProductId] = useState(null)
+  const [productImageDraft, setProductImageDraft] = useState('')
+  const [analyticsStartDate, setAnalyticsStartDate] = useState('')
+  const [analyticsEndDate, setAnalyticsEndDate] = useState('')
+  const [analyticsTab, setAnalyticsTab] = useState('ganancias')
+  const [logisticsCosts, setLogisticsCosts] = useState([])
+  const [logisticsCostForm, setLogisticsCostForm] = useState({ date: new Date().toISOString().slice(0, 10), amount: '', note: '' })
   const [theme, setTheme] = useState(getStoredTheme)
 
   useEffect(() => {
@@ -126,14 +208,15 @@ export default function App() {
       setProducts((stored.products || initialProducts).map(normalizeProduct))
       setSales((stored.sales || initialSales).map(normalizeSale))
       setCategories(stored.categories || initialCategories)
+      setLogisticsCosts((stored.logisticsCosts || []).map(normalizeLogisticsCost))
     }
   }, [])
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      window.localStorage.setItem('gizmo-inventory-data', JSON.stringify({ products, sales, categories }))
+      window.localStorage.setItem('gizmo-inventory-data', JSON.stringify({ products, sales, categories, logisticsCosts }))
     }
-  }, [products, sales, categories])
+  }, [products, sales, categories, logisticsCosts])
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -143,9 +226,12 @@ export default function App() {
   }, [theme])
 
   const summary = useMemo(() => {
+    const currentMonth = new Date().toISOString().slice(0, 7)
     const totalProducts = products.length
     const totalQuantity = products.reduce((sum, item) => sum + item.quantity, 0)
-    const totalSales = sales.reduce((sum, item) => sum + item.total, 0)
+    const totalSales = sales
+      .filter((item) => item.status !== 'Cancelada' && item.date.startsWith(currentMonth))
+      .reduce((sum, item) => sum + item.total, 0)
     const pendingSales = sales.filter((item) => item.status === 'Pendiente').length
 
     return { totalProducts, totalQuantity, totalSales, pendingSales }
@@ -153,12 +239,88 @@ export default function App() {
 
   const pendingSales = useMemo(() => sales.filter((sale) => sale.status === 'Pendiente'), [sales])
 
+  const analyticsSales = useMemo(() => {
+    const start = analyticsStartDate || null
+    const end = analyticsEndDate || null
+
+    return sales.filter((sale) => {
+      if (sale.status === 'Cancelada') return false
+      if (start && sale.date < start) return false
+      if (end && sale.date > end) return false
+      return true
+    })
+  }, [sales, analyticsStartDate, analyticsEndDate])
+
+  const filteredLogisticsCosts = useMemo(() => {
+    const start = analyticsStartDate || null
+    const end = analyticsEndDate || null
+
+    return logisticsCosts.filter((cost) => {
+      if (start && cost.date < start) return false
+      if (end && cost.date > end) return false
+      return true
+    })
+  }, [logisticsCosts, analyticsStartDate, analyticsEndDate])
+
+  const analyticsSummary = useMemo(() => {
+    const productByName = new Map(products.map((product) => [product.name, product]))
+    const grouped = new Map()
+
+    let totalProfit = 0
+    let totalUnits = 0
+
+    analyticsSales.forEach((sale) => {
+      const fallbackProduct = productByName.get(sale.productName)
+      const unitSalePrice = Number.isFinite(sale.unitSalePrice)
+        ? sale.unitSalePrice
+        : sale.quantity > 0
+          ? sale.total / sale.quantity
+          : fallbackProduct?.salePrice ?? 0
+      const unitPrice = Number.isFinite(sale.unitPrice) ? sale.unitPrice : fallbackProduct?.price ?? unitSalePrice
+      const lineProfit = (unitSalePrice - unitPrice) * sale.quantity
+
+      totalProfit += lineProfit
+      totalUnits += sale.quantity
+
+      const current = grouped.get(sale.productName) || {
+        productName: sale.productName,
+        quantity: 0,
+        profit: 0,
+      }
+      current.quantity += sale.quantity
+      current.profit += lineProfit
+      grouped.set(sale.productName, current)
+    })
+
+    const rankedBySales = Array.from(grouped.values()).sort((a, b) => b.quantity - a.quantity)
+    const rankedByWorst = [...rankedBySales].sort((a, b) => a.quantity - b.quantity)
+    const rankedByProfit = [...rankedBySales].sort((a, b) => b.profit - a.profit)
+
+    const logisticsCost = filteredLogisticsCosts.reduce((sum, item) => sum + item.amount, 0)
+
+    return {
+      grossProfit: totalProfit,
+      logisticsCost,
+      totalProfit: totalProfit - logisticsCost,
+      totalUnits,
+      totalRecords: analyticsSales.length,
+      topProducts: rankedBySales.slice(0, 5),
+      worstProducts: rankedByWorst.slice(0, 5),
+      topProfitProducts: rankedByProfit.slice(0, 5),
+    }
+  }, [analyticsSales, filteredLogisticsCosts, products])
+
   const selectedSaleProduct = useMemo(
     () => products.find((product) => product.id === Number(saleForm.productId) && !product.retired) || null,
     [products, saleForm.productId],
   )
 
   const saleEligibleProducts = useMemo(() => products.filter((product) => !product.retired), [products])
+
+  const selectedProductForImage = useMemo(
+    () => products.find((product) => product.id === selectedProductId) || null,
+    [products, selectedProductId],
+  )
 
   const handleAddProduct = (event) => {
     event.preventDefault()
@@ -189,6 +351,7 @@ export default function App() {
       quantity: Number(productForm.quantity),
       minimum,
       retired: productForm.retired === 'retirado',
+      imageUrl: productForm.imageUrl.trim(),
     }
 
     setProducts((prev) => [newProduct, ...prev])
@@ -200,6 +363,7 @@ export default function App() {
       quantity: '',
       minimum: String(minimum),
       retired: productForm.retired,
+      imageUrl: '',
     })
 
     if (!categories.includes(productForm.category.trim())) {
@@ -262,6 +426,8 @@ export default function App() {
       productName: product.name,
       quantity,
       total: Number((product.salePrice * quantity).toFixed(2)),
+      unitPrice: product.price,
+      unitSalePrice: product.salePrice,
       status: saleForm.status,
       recipientName: saleForm.recipientName.trim(),
       shippingAddress: saleForm.shippingAddress.trim(),
@@ -364,6 +530,8 @@ export default function App() {
     if (isInventoryEditing) {
       setIsInventoryEditing(false)
       setEditingProductIds([])
+      setDraftPrices({})
+      setDraftSalePrices({})
       setDraftQuantities({})
       setDraftMinimums({})
       setDraftRetired({})
@@ -371,15 +539,27 @@ export default function App() {
     }
 
     setIsInventoryEditing(true)
+    const nextPriceDrafts = Object.fromEntries(products.map((product) => [product.id, String(product.price)]))
+    const nextSalePriceDrafts = Object.fromEntries(products.map((product) => [product.id, String(product.salePrice)]))
     const nextDrafts = Object.fromEntries(products.map((product) => [product.id, String(product.quantity)]))
     const nextMinimumDrafts = Object.fromEntries(products.map((product) => [product.id, String(product.minimum)]))
     const nextRetiredDrafts = Object.fromEntries(
       products.map((product) => [product.id, product.retired ? 'retirado' : 'en-venta']),
     )
+    setDraftPrices(nextPriceDrafts)
+    setDraftSalePrices(nextSalePriceDrafts)
     setDraftQuantities(nextDrafts)
     setDraftMinimums(nextMinimumDrafts)
     setDraftRetired(nextRetiredDrafts)
     setEditingProductIds(products.map((product) => product.id))
+  }
+
+  const updateDraftPrice = (productId, value) => {
+    setDraftPrices((prev) => ({ ...prev, [productId]: value }))
+  }
+
+  const updateDraftSalePrice = (productId, value) => {
+    setDraftSalePrices((prev) => ({ ...prev, [productId]: value }))
   }
 
   const updateDraftQuantity = (productId, value) => {
@@ -395,9 +575,13 @@ export default function App() {
   }
 
   const saveStockEdit = (productId) => {
+    const normalizedPrice = Number(draftPrices[productId])
+    const normalizedSalePrice = Number(draftSalePrices[productId])
     const normalizedValue = Number(draftQuantities[productId])
     const normalizedMinimum = Number(draftMinimums[productId])
     const isRetired = draftRetired[productId] === 'retirado'
+    if (!Number.isFinite(normalizedPrice) || normalizedPrice < 0) return
+    if (!Number.isFinite(normalizedSalePrice) || normalizedSalePrice < 0) return
     if (!Number.isFinite(normalizedValue) || normalizedValue < 0) return
     if (!Number.isFinite(normalizedMinimum) || normalizedMinimum < 0) return
 
@@ -407,11 +591,20 @@ export default function App() {
     setProducts((prev) =>
       prev.map((item) =>
         item.id === productId
-          ? { ...item, quantity: normalizedValue, minimum: normalizedMinimum, retired: isRetired }
+          ? {
+              ...item,
+              price: normalizedPrice,
+              salePrice: normalizedSalePrice,
+              quantity: normalizedValue,
+              minimum: normalizedMinimum,
+              retired: isRetired,
+            }
           : item,
       ),
     )
     setEditingProductIds((prev) => prev.filter((id) => id !== productId))
+    setDraftPrices((prev) => ({ ...prev, [productId]: String(normalizedPrice) }))
+    setDraftSalePrices((prev) => ({ ...prev, [productId]: String(normalizedSalePrice) }))
     setDraftQuantities((prev) => ({ ...prev, [productId]: String(normalizedValue) }))
     setDraftMinimums((prev) => ({ ...prev, [productId]: String(normalizedMinimum) }))
     setDraftRetired((prev) => ({ ...prev, [productId]: isRetired ? 'retirado' : 'en-venta' }))
@@ -419,23 +612,81 @@ export default function App() {
 
   const cancelStockEdit = () => {
     setEditingProductIds([])
+    setDraftPrices({})
+    setDraftSalePrices({})
     setDraftQuantities({})
     setDraftMinimums({})
     setDraftRetired({})
     setIsInventoryEditing(false)
   }
 
+  const clearAnalyticsFilters = () => {
+    setAnalyticsStartDate('')
+    setAnalyticsEndDate('')
+  }
+
+  const handleAddLogisticsCost = (event) => {
+    event.preventDefault()
+
+    const amount = Number(logisticsCostForm.amount)
+    if (!logisticsCostForm.date || !Number.isFinite(amount) || amount < 0) return
+
+    const newCost = normalizeLogisticsCost({
+      id: Date.now(),
+      date: logisticsCostForm.date,
+      amount,
+      note: logisticsCostForm.note.trim(),
+    })
+
+    setLogisticsCosts((prev) => [newCost, ...prev])
+    setLogisticsCostForm((prev) => ({ ...prev, amount: '', note: '' }))
+  }
+
+  const removeLogisticsCost = (costId) => {
+    setLogisticsCosts((prev) => prev.filter((item) => item.id !== costId))
+  }
+
+  const openProductImage = (product) => {
+    setSelectedProductId(product.id)
+    setProductImageDraft(product.imageUrl || '')
+  }
+
+  const closeProductImage = () => {
+    setSelectedProductId(null)
+    setProductImageDraft('')
+  }
+
+  const saveProductImage = (event) => {
+    event.preventDefault()
+    if (!selectedProductForImage) return
+
+    const nextImageUrl = productImageDraft.trim()
+    setProducts((prev) =>
+      prev.map((product) => (product.id === selectedProductForImage.id ? { ...product, imageUrl: nextImageUrl } : product)),
+    )
+  }
+
+  const heroEyebrow =
+    activeScreen === 'dashboard'
+      ? 'Inventario simple y claro'
+      : activeScreen === 'sales'
+        ? 'Ventas pendientes'
+        : 'Analitica del negocio'
+
+  const heroCopy =
+    activeScreen === 'dashboard'
+      ? 'Lleva el control de categorías, productos, precios, stock y ventas desde una sola vista.'
+      : activeScreen === 'sales'
+        ? 'Revisa pedidos pendientes, completa ventas cuando toque y corrige direcciones de envío.'
+        : 'Filtra por fecha y analiza ganancias, productos mas vendidos y productos con menos salida.'
+
   return (
     <div className="app-shell">
       <header className="hero">
         <div>
-          <p className="eyebrow">{activeScreen === 'dashboard' ? 'Inventario simple y claro' : 'Ventas pendientes'}</p>
+          <p className="eyebrow">{heroEyebrow}</p>
           <h1>Gizmo Inventario</h1>
-          <p className="hero-copy">
-            {activeScreen === 'dashboard'
-              ? 'Lleva el control de categorías, productos, precios, stock y ventas desde una sola vista.'
-              : 'Revisa pedidos pendientes, completa ventas cuando toque y corrige direcciones de envío.'}
-          </p>
+          <p className="hero-copy">{heroCopy}</p>
         </div>
         <div className="hero-actions">
           <div className="screen-switcher">
@@ -452,6 +703,13 @@ export default function App() {
               onClick={() => setActiveScreen('sales')}
             >
               Ventas pendientes
+            </button>
+            <button
+              type="button"
+              className={activeScreen === 'analytics' ? 'screen-switcher-btn screen-switcher-btn-active' : 'screen-switcher-btn'}
+              onClick={() => setActiveScreen('analytics')}
+            >
+              Ganancias
             </button>
           </div>
           <button type="button" className="theme-toggle" onClick={toggleTheme}>
@@ -472,7 +730,7 @@ export default function App() {
               <strong>{summary.totalQuantity}</strong>
             </article>
             <article className="card stat-card">
-              <span>Ventas registradas</span>
+              <span>Ventas del mes</span>
               <strong>{formatCurrency(summary.totalSales)}</strong>
             </article>
             <article className="card stat-card">
@@ -509,9 +767,39 @@ export default function App() {
                   {products.map((product) => (
                     <tr key={product.id}>
                       <td>{product.category}</td>
-                      <td>{product.name}</td>
-                      <td>{formatCurrency(product.price)}</td>
-                      <td>{formatCurrency(product.salePrice)}</td>
+                      <td>
+                        <button type="button" className="product-name-button" onClick={() => openProductImage(product)}>
+                          {product.name}
+                        </button>
+                      </td>
+                      <td>
+                        {isInventoryEditing && editingProductIds.includes(product.id) ? (
+                          <input
+                            className="inline-quantity-input"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={draftPrices[product.id] ?? ''}
+                            onChange={(event) => updateDraftPrice(product.id, event.target.value)}
+                          />
+                        ) : (
+                          formatCurrency(product.price)
+                        )}
+                      </td>
+                      <td>
+                        {isInventoryEditing && editingProductIds.includes(product.id) ? (
+                          <input
+                            className="inline-quantity-input"
+                            type="number"
+                            min="0"
+                            step="0.01"
+                            value={draftSalePrices[product.id] ?? ''}
+                            onChange={(event) => updateDraftSalePrice(product.id, event.target.value)}
+                          />
+                        ) : (
+                          formatCurrency(product.salePrice)
+                        )}
+                      </td>
                       <td>
                         {isInventoryEditing && editingProductIds.includes(product.id) ? (
                           <div className="edit-stock-actions">
@@ -631,6 +919,12 @@ export default function App() {
                   <option value="en-venta">En venta</option>
                   <option value="retirado">Retirado</option>
                 </select>
+                <input
+                  type="url"
+                  value={productForm.imageUrl}
+                  onChange={(event) => setProductForm((prev) => ({ ...prev, imageUrl: event.target.value }))}
+                  placeholder="URL de imagen (opcional)"
+                />
                 <button type="submit">Guardar producto</button>
               </form>
             </div>
@@ -678,6 +972,212 @@ export default function App() {
         </>
       )}
 
+      {activeScreen === 'analytics' && (
+        <section className="card analytics-screen">
+          <div className="section-header analytics-header">
+            <div>
+              <h2>Ganancias</h2>
+              <p>Filtra el historial por fecha y revisa ganancias, top de productos y el rendimiento mas bajo.</p>
+            </div>
+          </div>
+
+          <div className="analytics-tab-switcher">
+            <button
+              type="button"
+              className={analyticsTab === 'ganancias' ? 'screen-switcher-btn screen-switcher-btn-active' : 'screen-switcher-btn'}
+              onClick={() => setAnalyticsTab('ganancias')}
+            >
+              Ganancias
+            </button>
+            <button
+              type="button"
+              className={analyticsTab === 'costos' ? 'screen-switcher-btn screen-switcher-btn-active' : 'screen-switcher-btn'}
+              onClick={() => setAnalyticsTab('costos')}
+            >
+              Costos
+            </button>
+          </div>
+
+          <div className="analytics-filters">
+            <label>
+              Desde
+              <input
+                type="date"
+                value={analyticsStartDate}
+                onChange={(event) => setAnalyticsStartDate(event.target.value)}
+              />
+            </label>
+            <label>
+              Hasta
+              <input
+                type="date"
+                value={analyticsEndDate}
+                onChange={(event) => setAnalyticsEndDate(event.target.value)}
+              />
+            </label>
+            <button type="button" className="ghost-btn" onClick={clearAnalyticsFilters}>
+              Limpiar
+            </button>
+          </div>
+
+          {analyticsTab === 'ganancias' && (
+            <>
+              <section className="stats-grid analytics-stats-grid">
+                <article className="card stat-card analytics-panel">
+                  <span>Ganancias netas</span>
+                  <strong>{formatCurrency(analyticsSummary.totalProfit)}</strong>
+                </article>
+                <article className="card stat-card analytics-panel">
+                  <span>Ganancias brutas</span>
+                  <strong>{formatCurrency(analyticsSummary.grossProfit)}</strong>
+                </article>
+                <article className="card stat-card analytics-panel">
+                  <span>Costo logistico</span>
+                  <strong>{formatCurrency(analyticsSummary.logisticsCost)}</strong>
+                </article>
+                <article className="card stat-card analytics-panel">
+                  <span>Unidades vendidas</span>
+                  <strong>{analyticsSummary.totalUnits}</strong>
+                </article>
+              </section>
+
+              <div className="analytics-grid">
+                <article className="analytics-panel">
+                  <h3>Top productos mas vendidos</h3>
+                  <div className="analytics-chart-list">
+                    {analyticsSummary.topProducts.length > 0 ? (
+                      analyticsSummary.topProducts.map((item, index) => {
+                        const max = analyticsSummary.topProducts[0]?.quantity || 1
+                        const width = Math.max(8, (item.quantity / max) * 100)
+                        return (
+                          <div key={`top-${item.productName}-${index}`} className="chart-row">
+                            <div className="chart-row-label">
+                              <span>{item.productName}</span>
+                              <strong>{item.quantity}</strong>
+                            </div>
+                            <div className="chart-track">
+                              <div className="chart-bar chart-bar-top" style={{ width: `${width}%` }} />
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <p className="analytics-empty">No hay ventas en el rango seleccionado.</p>
+                    )}
+                  </div>
+                </article>
+
+                <article className="analytics-panel">
+                  <h3>Productos con menor salida</h3>
+                  <div className="analytics-chart-list">
+                    {analyticsSummary.worstProducts.length > 0 ? (
+                      analyticsSummary.worstProducts.map((item, index) => {
+                        const max = analyticsSummary.worstProducts[analyticsSummary.worstProducts.length - 1]?.quantity || 1
+                        const width = Math.max(8, (item.quantity / max) * 100)
+                        return (
+                          <div key={`worst-${item.productName}-${index}`} className="chart-row">
+                            <div className="chart-row-label">
+                              <span>{item.productName}</span>
+                              <strong>{item.quantity}</strong>
+                            </div>
+                            <div className="chart-track">
+                              <div className="chart-bar chart-bar-worst" style={{ width: `${width}%` }} />
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <p className="analytics-empty">No hay ventas en el rango seleccionado.</p>
+                    )}
+                  </div>
+                </article>
+
+                <article className="analytics-panel analytics-panel-wide">
+                  <h3>Ganancia por producto</h3>
+                  <div className="analytics-chart-list">
+                    {analyticsSummary.topProfitProducts.length > 0 ? (
+                      analyticsSummary.topProfitProducts.map((item, index) => {
+                        const maxProfit = analyticsSummary.topProfitProducts[0]?.profit || 1
+                        const width = Math.max(8, (item.profit / maxProfit) * 100)
+                        return (
+                          <div key={`profit-${item.productName}-${index}`} className="chart-row">
+                            <div className="chart-row-label">
+                              <span>{item.productName}</span>
+                              <strong>{formatCurrency(item.profit)}</strong>
+                            </div>
+                            <div className="chart-track">
+                              <div className="chart-bar chart-bar-profit" style={{ width: `${width}%` }} />
+                            </div>
+                          </div>
+                        )
+                      })
+                    ) : (
+                      <p className="analytics-empty">No hay ganancias para mostrar en este rango.</p>
+                    )}
+                  </div>
+                </article>
+              </div>
+            </>
+          )}
+
+          {analyticsTab === 'costos' && (
+            <div className="costs-layout">
+              <article className="analytics-panel">
+                <h3>Agregar costo de logistica</h3>
+                <form className="form-stack panel-form" onSubmit={handleAddLogisticsCost}>
+                  <input
+                    type="date"
+                    value={logisticsCostForm.date}
+                    onChange={(event) => setLogisticsCostForm((prev) => ({ ...prev, date: event.target.value }))}
+                    required
+                  />
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={logisticsCostForm.amount}
+                    onChange={(event) => setLogisticsCostForm((prev) => ({ ...prev, amount: event.target.value }))}
+                    placeholder="Costo de logistica"
+                    required
+                  />
+                  <input
+                    value={logisticsCostForm.note}
+                    onChange={(event) => setLogisticsCostForm((prev) => ({ ...prev, note: event.target.value }))}
+                    placeholder="Nota (opcional)"
+                  />
+                  <button type="submit">Guardar costo</button>
+                </form>
+              </article>
+
+              <article className="analytics-panel">
+                <h3>Costos en rango</h3>
+                <p className="costs-total">Total: {formatCurrency(analyticsSummary.logisticsCost)}</p>
+                <div className="sales-list costs-list">
+                  {filteredLogisticsCosts.length > 0 ? (
+                    filteredLogisticsCosts.map((cost) => (
+                      <div key={cost.id} className="sale-item">
+                        <div>
+                          <strong>{formatCurrency(cost.amount)}</strong>
+                          <p>{cost.note || 'Sin nota'}</p>
+                        </div>
+                        <div className="sale-meta">
+                          <small>{cost.date}</small>
+                          <button type="button" className="ghost-btn" onClick={() => removeLogisticsCost(cost.id)}>
+                            Eliminar
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="analytics-empty">No hay costos de logistica en el rango seleccionado.</p>
+                  )}
+                </div>
+              </article>
+            </div>
+          )}
+        </section>
+      )}
+
       {activeScreen === 'sales' && (
         <section className="card sales-screen">
           <div className="section-header">
@@ -718,9 +1218,6 @@ export default function App() {
                         <div className="pending-sale-actions">
                           <button type="button" className="ghost-btn" onClick={() => beginSaleEdit(sale)}>
                             Editar
-                          </button>
-                          <button type="button" className="secondary-btn" onClick={() => markSaleCompleted(sale.id)}>
-                            Completar
                           </button>
                         </div>
                       </article>
@@ -871,6 +1368,51 @@ export default function App() {
             </div>
           )}
         </section>
+      )}
+
+      {selectedProductForImage && (
+        <div className="modal-backdrop" role="presentation" onClick={closeProductImage}>
+          <div
+            className="modal-card product-image-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="product-image-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-header">
+              <div>
+                <h3 id="product-image-title">Imagen de {selectedProductForImage.name}</h3>
+                <p>Haz clic en guardar para actualizar la imagen del producto.</p>
+              </div>
+              <button type="button" className="ghost-btn" onClick={closeProductImage}>
+                Cerrar
+              </button>
+            </div>
+
+            {selectedProductForImage.imageUrl ? (
+              <img
+                className="product-image-preview"
+                src={selectedProductForImage.imageUrl}
+                alt={`Imagen de ${selectedProductForImage.name}`}
+              />
+            ) : (
+              <div className="product-image-empty">
+                <p>Este producto no tiene imagen.</p>
+                <p>Agrega una URL para mostrarla en esta sección.</p>
+              </div>
+            )}
+
+            <form onSubmit={saveProductImage} className="form-stack panel-form product-image-form">
+              <input
+                type="url"
+                value={productImageDraft}
+                onChange={(event) => setProductImageDraft(event.target.value)}
+                placeholder="https://..."
+              />
+              <button type="submit">Guardar imagen</button>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   )
