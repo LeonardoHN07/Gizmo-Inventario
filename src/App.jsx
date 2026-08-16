@@ -262,6 +262,11 @@ export default function App() {
     })
   }, [logisticsCosts, analyticsStartDate, analyticsEndDate])
 
+  const logisticsCostsTotal = useMemo(
+    () => logisticsCosts.reduce((sum, item) => sum + item.amount, 0),
+    [logisticsCosts],
+  )
+
   const analyticsSummary = useMemo(() => {
     const productByName = new Map(products.map((product) => [product.name, product]))
     const grouped = new Map()
@@ -998,27 +1003,29 @@ export default function App() {
             </button>
           </div>
 
-          <div className="analytics-filters">
-            <label>
-              Desde
-              <input
-                type="date"
-                value={analyticsStartDate}
-                onChange={(event) => setAnalyticsStartDate(event.target.value)}
-              />
-            </label>
-            <label>
-              Hasta
-              <input
-                type="date"
-                value={analyticsEndDate}
-                onChange={(event) => setAnalyticsEndDate(event.target.value)}
-              />
-            </label>
-            <button type="button" className="ghost-btn" onClick={clearAnalyticsFilters}>
-              Limpiar
-            </button>
-          </div>
+          {analyticsTab === 'ganancias' && (
+            <div className="analytics-filters">
+              <label>
+                Desde
+                <input
+                  type="date"
+                  value={analyticsStartDate}
+                  onChange={(event) => setAnalyticsStartDate(event.target.value)}
+                />
+              </label>
+              <label>
+                Hasta
+                <input
+                  type="date"
+                  value={analyticsEndDate}
+                  onChange={(event) => setAnalyticsEndDate(event.target.value)}
+                />
+              </label>
+              <button type="button" className="ghost-btn" onClick={clearAnalyticsFilters}>
+                Limpiar
+              </button>
+            </div>
+          )}
 
           {analyticsTab === 'ganancias' && (
             <>
@@ -1151,10 +1158,10 @@ export default function App() {
 
               <article className="analytics-panel">
                 <h3>Costos en rango</h3>
-                <p className="costs-total">Total: {formatCurrency(analyticsSummary.logisticsCost)}</p>
+                <p className="costs-total">Total: {formatCurrency(logisticsCostsTotal)}</p>
                 <div className="sales-list costs-list">
-                  {filteredLogisticsCosts.length > 0 ? (
-                    filteredLogisticsCosts.map((cost) => (
+                  {logisticsCosts.length > 0 ? (
+                    logisticsCosts.map((cost) => (
                       <div key={cost.id} className="sale-item">
                         <div>
                           <strong>{formatCurrency(cost.amount)}</strong>
@@ -1169,7 +1176,7 @@ export default function App() {
                       </div>
                     ))
                   ) : (
-                    <p className="analytics-empty">No hay costos de logistica en el rango seleccionado.</p>
+                    <p className="analytics-empty">No hay costos de logistica registrados.</p>
                   )}
                 </div>
               </article>
